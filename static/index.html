@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>Moa · 多模型协作问答</title>
+<style>
+:root {
+  --bg: #0f1117; --panel: #171a23; --panel2: #1d2130; --border: #2a2f42;
+  --text: #e6e9f2; --muted: #8b93a8; --accent: #6c8cff; --ok: #4ade80;
+  --err: #f87171; --warn: #fbbf24; --main-accent: #c084fc;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--text); font-family: "Segoe UI", "Microsoft YaHei", sans-serif; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
+header { padding: 14px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+header h1 { font-size: 18px; font-weight: 600; }
+header h1 span { color: var(--accent); }
+.badge { font-size: 11px; color: var(--muted); background: var(--panel2); border: 1px solid var(--border); padding: 3px 10px; border-radius: 12px; }
+.spacer { flex: 1; }
+button { background: var(--panel2); color: var(--text); border: 1px solid var(--border); padding: 8px 16px; border-radius: 8px; cursor: pointer; font-size: 13px; transition: .15s; }
+button:hover { border-color: var(--accent); color: var(--accent); }
+button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+button.primary:hover { opacity: .85; color: #fff; }
+button:disabled { opacity: .45; cursor: not-allowed; }
+
+#columns { flex: 1; display: flex; flex-wrap: wrap; gap: 10px; padding: 12px; overflow-y: auto; min-height: 0; align-content: flex-start; }
+.col { flex: 1 1 300px; min-width: 260px; max-width: 560px; background: var(--panel); border: 1px solid var(--border); border-radius: 12px; display: flex; flex-direction: column; min-height: 240px; max-height: 100%; }
+/* 模型多时收窄,保证一行能放下更多栏 */
+#columns.many .col { flex-basis: 260px; max-width: 420px; min-height: 200px; }
+#columns .col.summary-col {
+  border-color: var(--main-accent);
+  box-shadow: 0 0 18px rgba(192,132,252,.08);
+  flex-basis: 100% !important;
+  max-width: 900px;
+  min-height: 400px;
+  margin: 0 auto;
+}
+.col-head .copy-btn {
+  margin-left: auto;
+  padding: 4px 10px;
+  font-size: 11px;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  cursor: pointer;
+  transition: .15s;
+}
+.col-head .copy-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.col-head .copy-btn.copied {
+  border-color: var(--ok);
+  color: var(--ok);
+}
+.col-head { padding: 10px 14px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
+.dot.waiting { background: var(--muted); animation: pulse 1.5s infinite; }
+.dot.streaming { background: var(--ok); animation: pulse 1s infinite; }
+.dot.ok { background: var(--ok); }
+.dot.err { background: var(--err); }
+.col-body { flex: 1; overflow-y: auto; padding: 12px 14px; font-size: 13px; line-height: 1.7; white-space: pre-wrap; word-break: break-word; }
+.col-meta { padding: 6px 14px; font-size: 11px; color: var(--muted); border-top: 1px solid var(--border); min-height: 24px; }
+.cursor::after { content: "▍"; color: var(--accent); animation: blink 1s infinite; }
+
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.35} }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+
+footer { border-top: 1px solid var(--border); padding: 12px; display: flex; gap: 10px; }
+textarea { flex: 1; background: var(--panel2); border: 1px solid var(--border); color: var(--text); border-radius: 10px; padding: 10px 14px; resize: none; font-family: inherit; font-size: 14px; line-height: 1.5; }
+textarea:focus { outline: none; border-color: var(--accent); }
+
+#modal-mask { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 100; }
+#modal-mask.show { display: flex; }
+#modal-box { margin: auto; width: min(720px, 92vw); max-height: 86vh; overflow-y: auto; background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 20px; }
+#modal-box h2 { font-size: 16px; margin-bottom: 14px; }
+#modal-box hr { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
+details.prov { background: var(--panel2); border: 1px solid var(--border); border-radius: 10px; padding: 8px 12px; margin-bottom: 8px; }
+details.prov summary { cursor: pointer; display: flex; align-items: center; gap: 10px; list-style: none; }
+details.prov summary::-webkit-details-marker { display: none; }
+details.prov .fields { padding: 10px 0 4px 24px; display: grid; grid-template-columns: 80px 1fr; gap: 8px 10px; align-items: center; font-size: 12px; }
+details.prov input { background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; font-size: 12px; }
+details.prov input:focus { outline: none; border-color: var(--accent); }
+details.prov .actions { padding: 4px 0 8px 24px; display: flex; gap: 8px; align-items: center; }
+details.prov .actions button { padding: 4px 10px; font-size: 11px; }
+details.prov .test-result { font-size: 11px; }
+.preset-row { margin-top: 14px; }
+.preset-row .label { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+.preset-row .btns { display: flex; gap: 8px; flex-wrap: wrap; }
+.preset-row .btns button { padding: 5px 12px; font-size: 12px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Moa <span>· 多模型协作问答</span></h1>
+  <span class="badge" id="status-badge">未开始</span>
+  <div class="spacer"></div>
+  <button id="btn-settings">⚙ 设置</button>
+</header>
+
+<div id="columns"></div>
+
+<footer>
+  <textarea id="question" rows="3" placeholder="输入你的问题,分发给多个模型… (Enter 发送, Shift+Enter 换行)"></textarea>
+  <button class="primary" id="btn-ask">发送</button>
+</footer>
+
+<!-- Settings Modal -->
+<div id="modal-mask">
+  <div id="modal-box">
+    <div style="display:flex; align-items:center; margin-bottom:14px;">
+      <h2 style="flex:1;">模型接入配置</h2>
+      <button id="btn-close-modal">✕</button>
+    </div>
+    <p style="font-size:12px; color:var(--muted); margin-bottom:12px;">
+      所有厂商均走 OpenAI 兼容协议。填 API Key 即可;自定义 provider 填 Base URL + Key + 模型名。
+      Key 仅保存在本机 config.json。
+    </p>
+    <div id="provider-list"></div>
+    <hr>
+    <div style="display:flex; gap:10px; align-items:center;">
+      <label style="font-size:13px;">主模型:</label>
+      <select id="main-model" style="background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:6px 10px;flex:1;"></select>
+      <span style="font-size:12px;color:var(--muted);">负责最后归纳总结各子模型的回答</span>
+    </div>
+    <div style="margin-top:14px;">
+      <div style="display:flex; align-items:center; margin-bottom:6px;">
+        <label style="font-size:13px; flex:1;">主模型汇总提示词:</label>
+        <button id="btn-reset-prompt" style="padding:3px 10px;font-size:11px;">恢复默认</button>
+      </div>
+      <textarea id="summary-prompt" rows="7"
+        placeholder="留空则使用默认提示词。可用占位说明:问题与各子模型回答会自动拼接在此提示之前。"
+        style="width:100%; background:var(--panel2); color:var(--text); border:1px solid var(--border); border-radius:8px; padding:8px 10px; font-size:12px; line-height:1.6; resize:vertical; font-family:inherit;"></textarea>
+    </div>
+    <div style="display:flex; gap:10px; margin-top:18px;">
+      <button class="primary" id="btn-save-config">保存配置</button>
+      <button id="btn-add-provider">+ 自定义 Provider</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const S = { providers: {}, presets: [], main: null, cols: new Map() };
+const $ = s => document.querySelector(s);
+const esc = t => String(t).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+
+// ============ settings modal ============
+async function openSettings() {
+  await loadConfig();
+  renderProviderList();
+  renderMainSelect();
+  $("#modal-mask").classList.add("show");
+}
+function closeSettings() { $("#modal-mask").classList.remove("show"); }
+
+async function loadConfig() {
+  const r = await fetch("/api/config");
+  const j = await r.json();
+  S.providers = j.providers; S.presets = j.presets; S.main = j.main;
+  S.defaultSummaryPrompt = j.default_summary_prompt || "";
+  S.summaryPrompt = j.summary_prompt || "";
+}
+
+function renderProviderList() {
+  const el = $("#provider-list");
+  el.innerHTML = "";
+  for (const [pid, p] of Object.entries(S.providers)) {
+    const d = document.createElement("details");
+    d.className = "prov"; d.dataset.pid = pid;
+    d.innerHTML = `
+      <summary>
+        <input type="checkbox" class="p-enabled" ${p.enabled !== false ? "checked" : ""}>
+        <b>${esc(p.label || pid)}</b>
+        <code style="color:var(--muted);font-size:11px;">${esc(pid)}</code>
+      </summary>
+      <div class="fields">
+        <label>Base URL</label><input class="p-baseurl" value="${esc(p.base_url||"")}">
+        <label>API Key</label><input class="p-key" type="password" value="${esc(p.api_key||"")}" placeholder="${p.has_key ? "已保存(重输则覆盖)" : ""}">
+        <label>模型名</label><input class="p-model" value="${esc(p.model||"")}">
+        <label>显示名</label><input class="p-label" value="${esc(p.label||pid)}">
+      </div>
+      <div class="actions">
+        <button class="p-del">删除</button>
+        <button class="p-test">测试连通性</button>
+        <span class="test-result"></span>
+      </div>
+    `;
+    d.querySelector(".p-del").onclick = () => { delete S.providers[pid]; renderProviderList(); };
+    d.querySelector(".p-test").onclick = async () => {
+      const r = d.querySelector(".test-result");
+      r.textContent = "测试中…"; r.style.color = "var(--muted)";
+      try {
+        const res = await fetch("/api/test", {
+          method: "POST", headers: {"Content-Type":"application/json"},
+          body: JSON.stringify({
+            pid: pid,
+            base_url: d.querySelector(".p-baseurl").value,
+            api_key: d.querySelector(".p-key").value,
+            model: d.querySelector(".p-model").value,
+          })
+        });
+        const j = await res.json();
+        if (j.ok) { r.textContent = "✓ 连通"; r.style.color = "var(--ok)"; }
+        else { r.textContent = "✗ " + j.error; r.style.color = "var(--err)"; }
+      } catch (e) { r.textContent = "✗ " + e.message; r.style.color = "var(--err)"; }
+    };
+    el.appendChild(d);
+  }
+  const have = new Set(Object.keys(S.providers));
+  const notAdded = S.presets.filter(x => !have.has(x.id));
+  if (notAdded.length) {
+    const row = document.createElement("div");
+    row.className = "preset-row";
+    row.innerHTML = `<div class="label">快速添加预设:</div><div class="btns"></div>`;
+    const btns = row.querySelector(".btns");
+    for (const x of notAdded) {
+      const b = document.createElement("button");
+      b.textContent = x.label;
+      b.onclick = () => {
+        S.providers[x.id] = { base_url: x.base_url, api_key: "", model: x.default_model, label: x.label };
+        renderProviderList();
+      };
+      btns.appendChild(b);
+    }
+    el.appendChild(row);
+  }
+}
+
+function renderMainSelect() {
+  const sel = $("#main-model");
+  sel.innerHTML = '<option value="">(不指定)</option>';
+  for (const [pid, p] of Object.entries(S.providers)) {
+    const o = document.createElement("option");
+    o.value = pid; o.textContent = `${p.label || pid} / ${p.model || ""}`;
+    if (pid === S.main) o.selected = true;
+    sel.appendChild(o);
+  }
+  // 汇总提示词编辑区
+  const sp = $("#summary-prompt");
+  if (sp && !sp.value) sp.value = S.summaryPrompt || "";
+  
+  // 主模型变更时,自动取消该模型的子模型勾选并禁用
+  sel.onchange = () => {
+    const mainPid = sel.value;
+    // 先恢复所有 provider 的勾选框为可用
+    document.querySelectorAll(".prov").forEach(d => {
+      const cb = d.querySelector(".p-enabled");
+      if (cb) { cb.disabled = false; }
+      const label = d.querySelector("summary b");
+      if (label) { label.style.color = ""; }
+    });
+    
+    // 如果选了主模型,禁用该模型的勾选框
+    if (mainPid) {
+      const prov = document.querySelector(`.prov[data-pid="${mainPid}"]`);
+      if (prov) {
+        const cb = prov.querySelector(".p-enabled");
+        if (cb) {
+          cb.checked = false;
+          cb.disabled = true;
+          const label = prov.querySelector("summary b");
+          if (label) { label.style.color = "var(--main-accent)"; }
+        }
+      }
+    }
+  };
+  
+  // 初始化时也要应用一次
+  sel.onchange();
+}
+
+async function saveConfig() {
+  const providers = {};
+  document.querySelectorAll(".prov").forEach(d => {
+    const pid = d.dataset.pid;
+    providers[pid] = {
+      enabled: d.querySelector(".p-enabled").checked,
+      base_url: d.querySelector(".p-baseurl").value.trim(),
+      api_key: d.querySelector(".p-key").value.trim(),
+      model: d.querySelector(".p-model").value.trim(),
+      label: d.querySelector(".p-label").value.trim() || pid,
+    };
+  });
+  await fetch("/api/config", {
+    method: "POST", headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({
+      providers,
+      main: $("#main-model").value || null,
+      summary_prompt: $("#summary-prompt").value
+    })
+  });
+  await loadConfig();
+  closeSettings();
+}
+
+// ============ ask flow ============
+let busy = false;
+
+async function ask() {
+  const question = $("#question").value.trim();
+  if (!question) return alert("请先输入问题");
+  if (busy) return;
+
+  // 从 S.providers 状态读取 enabled,不依赖 DOM(设置弹窗可能未打开)
+  const enabledPids = Object.entries(S.providers)
+    .filter(([_, p]) => p.enabled !== false)
+    .map(([pid]) => pid);
+  if (!enabledPids.length) return alert("请先在设置中启用至少一个模型");
+
+  busy = true;
+  $("#btn-ask").disabled = true;
+  $("#question").disabled = true;
+  $("#status-badge").textContent = "运行中…";
+
+  buildColumns(enabledPids);
+
+  try {
+    const res = await fetch("/api/ask", {
+      method: "POST", headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({ question, models: enabledPids, main: $("#main-model").value || S.main })
+    });
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    let carry = "";
+    while (true) {
+      const { done, value } = await reader.read();
+      carry += dec.decode(value || new Uint8Array(), { stream: !done });
+      while (carry.includes("\n")) {
+        const idx = carry.indexOf("\n");
+        handleLine(carry.slice(0, idx));
+        carry = carry.slice(idx + 1);
+      }
+      if (done) break;
+    }
+  } catch (e) {
+    alert("请求失败:" + e.message);
+  }
+
+  busy = false;
+  $("#btn-ask").disabled = false;
+  $("#question").disabled = false;
+  $("#status-badge").textContent = "已完成";
+}
+
+function buildColumns(pids) {
+  $("#columns").innerHTML = "";
+  S.cols.clear();
+  for (const pid of pids) addColumn(pid, false);
+  addColumn("__summary__", true);
+  // 模型多时切换紧凑布局
+  $("#columns").classList.toggle("many", pids.length >= 4);
+}
+
+function addColumn(pid, isSummary) {
+  const name = isSummary ? "🎯 主模型汇总" : (S.providers[pid]?.label || pid);
+  const modelTag = isSummary ? "" : ` <code style="font-size:10px;color:var(--muted)">${esc(S.providers[pid]?.model||"")}</code>`;
+  const copyBtn = isSummary ? `<button class="copy-btn" onclick="copySummary(this)">复制</button>` : "";
+  $("#columns").insertAdjacentHTML("beforeend", `
+    <div class="col ${isSummary ? "summary-col" : ""}" data-pid="${esc(pid)}">
+      <div class="col-head">
+        <span class="dot waiting"></span>
+        <span>${esc(name)}${modelTag}</span>
+        ${copyBtn}
+      </div>
+      <div class="col-body cursor"></div>
+      <div class="col-meta"></div>
+    </div>
+  `);
+  const col = $("#columns").lastElementChild;
+  S.cols.set(pid, {
+    el: col, dot: col.querySelector(".dot"),
+    body: col.querySelector(".col-body"),
+    meta: col.querySelector(".col-meta"),
+    text: ""
+  });
+}
+
+function copySummary(btn) {
+  const col = btn.closest(".col");
+  const pid = col.dataset.pid;
+  const text = S.cols.get(pid)?.text || "";
+  navigator.clipboard.writeText(text).then(() => {
+    btn.textContent = "已复制";
+    btn.classList.add("copied");
+    setTimeout(() => {
+      btn.textContent = "复制";
+      btn.classList.remove("copied");
+    }, 2000);
+  });
+}
+
+function handleLine(line) {
+  if (!line.trim()) return;
+  let ev;
+  try { ev = JSON.parse(line); } catch { return; }
+
+  const tag = ev.tag || "__summary__";
+  const c = S.cols.get(tag);
+
+  switch (ev.event) {
+    case "start":
+      setDot(c, "streaming"); setStatus(c, "正在生成…");
+      break;
+    case "retry":
+      setDot(c, "waiting");
+      setStatus(c, `第 ${ev.attempt} 次重试,等待 ${ev.wait}s…`);
+      break;
+    case "delta":
+      if (!c) return;
+      c.text += ev.text;
+      c.body.textContent = c.text;
+      autoscroll(c.body);
+      break;
+    case "done":
+      setDot(c, "ok"); setStatus(c, `完成 · ${ev.chars} 字 · ${ev.elapsed}s`);
+      c.body.classList.remove("cursor");
+      break;
+    case "error":
+      setDot(c, "err");
+      c.body.innerHTML = `<span style="color:var(--err)">❌ 调用失败</span>\n${esc(ev.message)}`;
+      setStatus(c, "失败");
+      c.body.classList.remove("cursor");
+      break;
+    case "summary_start":
+      setDot(c, "streaming");
+      setStatus(c, "主模型正在归纳…");
+      break;
+    case "summary_delta":
+      if (!c) return;
+      c.text += ev.text;
+      c.body.textContent = c.text;
+      autoscroll(c.body);
+      break;
+    case "summary_done":
+      setDot(c, "ok"); setStatus(c, "汇总完成");
+      c.body.classList.remove("cursor");
+      break;
+    case "summary_error":
+      setDot(c, "err");
+      c.body.innerHTML = `<span style="color:var(--err)">❌ 汇总失败</span>\n${esc(ev.message)}`;
+      setStatus(c, "汇总失败");
+      break;
+    case "summary_skipped":
+      c.body.textContent = ev.message;
+      setDot(c, "ok"); setStatus(c, "跳过");
+      break;
+    case "fatal":
+      alert("出错:" + ev.message);
+      break;
+  }
+}
+
+function setDot(c, cls) { if (c) c.dot.className = "dot " + cls; }
+function setStatus(c, t) { if (c) c.meta.textContent = t; }
+function autoscroll(el) { el.scrollTop = el.scrollHeight; }
+
+// ============ events ============
+$("#btn-ask").onclick = ask;
+$("#question").addEventListener("keydown", e => {
+  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); ask(); }
+});
+$("#btn-settings").onclick = openSettings;
+$("#btn-close-modal").onclick = closeSettings;
+$("#modal-mask").addEventListener("click", e => { if (e.target.id === "modal-mask") closeSettings(); });
+$("#btn-save-config").onclick = saveConfig;
+$("#btn-reset-prompt").onclick = () => {
+  $("#summary-prompt").value = S.defaultSummaryPrompt || "";
+};
+$("#btn-add-provider").onclick = () => {
+  const id = "custom_" + Date.now();
+  S.providers[id] = { base_url: "", api_key: "", model: "", label: "自定义" };
+  renderProviderList();
+};
+
+// init
+loadConfig();
+</script>
+</body>
+</html>

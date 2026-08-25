@@ -1,0 +1,41 @@
+{
+  "providers": {
+    "custom_1787631219307": {
+      "enabled": true,
+      "base_url": "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1",
+      "api_key": "xxxx",
+      "model": "qwen3.8-max",
+      "label": "百炼"
+    },
+    "dashscope": {
+      "enabled": true,
+      "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+      "api_key": "xxxx",
+      "model": "qwen-plus",
+      "label": "阿里云百炼"
+    },
+    "deepseek": {
+      "enabled": false,
+      "base_url": "https://api.deepseek.com/v1",
+      "api_key": "xxxx",
+      "model": "deepseek-chat",
+      "label": "DeepSeek"
+    },
+    "openrouter": {
+      "enabled": false,
+      "base_url": "https://openrouter.ai/api/v1",
+      "api_key": "xxxx",
+      "model": "stealth/ox-alpha",
+      "label": "OpenRouter"
+    },
+    "zai": {
+      "enabled": true,
+      "base_url": "https://open.bigmodel.cn/api/coding/paas/v4",
+      "api_key": "xxxx",
+      "model": "glm-5.3",
+      "label": "智谱 GLM"
+    }
+  },
+  "main": "deepseek",
+  "summary_prompt": "结合各模型的返回，提供的视角和思路，整合后给自己的答案"
+}
