@@ -1,41 +1,14 @@
 {
-  "providers": {
-    "custom_1787631219307": {
-      "enabled": true,
-      "base_url": "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1",
-      "api_key": "xxxx",
-      "model": "qwen3.8-max",
-      "label": "百炼"
-    },
-    "dashscope": {
-      "enabled": true,
-      "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
-      "api_key": "xxxx",
-      "model": "qwen-plus",
-      "label": "阿里云百炼"
-    },
-    "deepseek": {
-      "enabled": false,
-      "base_url": "https://api.deepseek.com/v1",
-      "api_key": "xxxx",
-      "model": "deepseek-chat",
-      "label": "DeepSeek"
-    },
-    "openrouter": {
-      "enabled": false,
-      "base_url": "https://openrouter.ai/api/v1",
-      "api_key": "xxxx",
-      "model": "stealth/ox-alpha",
-      "label": "OpenRouter"
-    },
-    "zai": {
-      "enabled": true,
-      "base_url": "https://open.bigmodel.cn/api/coding/paas/v4",
-      "api_key": "xxxx",
-      "model": "glm-5.3",
-      "label": "智谱 GLM"
-    }
+  "keys": {
+    "zhipu-coding": "xxxxxx",
+    "deepseek": "xxxxxx",
+    "openrouter": "xxxxxx",
+    "alibaba-token": "xxxxxx"
   },
-  "main": "deepseek",
-  "summary_prompt": "结合各模型的返回，提供的视角和思路，整合后给自己的答案你是主控模型。不要逐个点评或罗列这些回答,而是:\n1. 汲取各回答中有价值的视角、论据与洞见;\n2. 剔除错误、片面或重复的内容,识别各模型的分歧点并独立判断谁更可信;\n3. 在此基础上形成你自己完整、连贯的最终答案——它应当比任何单一子模型的回答都更全面、更准确,直接回应问题本身。\n输出格式:直接给出你的最终答案(可分点/分层组织),如有必要可在末尾用一小段简述你采纳与舍弃了哪些观点及原因。用中文回答."
+  "custom_vendors": {},
+  "main": ["deepseek", "deepseek-chat"],
+  "search": {
+    "anysearch_key": "xxxxxx"
+  },
+  "summary_prompt": ""
 }

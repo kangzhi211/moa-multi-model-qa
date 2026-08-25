@@ -1,125 +1,86 @@
-# Moa - 多模型协作问答工具
+# Moa · 多模型协作问答
 
-Moa 是一个网页版的多模型协作问答工具，将一个问题分发给多个 AI 模型并发处理，各子模型的回答流式可见，最后由主模型归纳总结形成自己的答案。
-> 待办
-> 增加支持思考和联网能力
-> 增加返回md格式支持
+将一个问题同时分发给多个大模型并发处理，各模型的思考过程与回答**实时流式并排展示**，最后由主模型按「场景预判 → 模式切换」的 Cognitive Hub 提示词将多份回答融合为一份高质量答案。
 
-## 特性
+类似 ChatHub 的轻量版，但走 **纯 API 聚合**（无需浏览器自动化、无需各平台扫码登录），**贴上 API Key 即用**。
 
-- **多模型并发**：同时调用多个 AI 模型，流式输出实时可见
-- **主模型汇总**：主模型汲取各子模型视角，形成独立完整答案
-- **自适应布局**：模型多时自动换行，主模型独占一行居中显示
-- **一键复制**：主模型汇总结果支持一键复制
-- **内置预设**：支持智谱、百炼、DeepSeek、Kimi、MiniMax、OpenRouter、硅基流动、Ollama 等主流厂商
-- **自定义接入**：支持任何 OpenAI 兼容协议的模型
-- **失败重试**：自动重试机制（0.3s/0.6s 间隔）
-- **主模型互斥**：选定为主模型后自动从子模型列表排除
-- **自定义提示词**：主模型汇总提示词可配置
+## 核心特性
+
+- 🎯 **多模型并发对比** — 同一问题同时发给 N 个模型（支持同一厂商多个不同模型同台对比），思考过程 🧠 / 回答分栏实时流式展示
+- 🧠 **思考过程 + 思考等级** — 解析各厂商 `reasoning_content` 思考流；支持 低/中/高 思考等级（按厂商方言转成 `thinking_budget` / `reasoning_effort` 等参数）
+- 🌐 **应用侧统一联网** — 开启后先搜索（Anysearch 优先，ddgs 兜底），把**同一份搜索材料**注入所有子模型的 prompt，保证对比公平；不依赖厂商各自的联网参数
+- 🤖 **认知中枢式汇总** — 主模型先判断子回答属于 高度共识 / 百花齐放 / 事实冲突 / 信息残缺 哪种场景，自动切换 萃取 / 策展 / 仲裁 / 缝合 四种模式输出；汇总为真流式
+- 🏪 **models.dev 驱动的厂商库** — 厂商端点、模型列表、思考能力标注来自 [models.dev](https://models.dev) 社区数据库（与 Hermes 同源），自动更新、永不过期；另内置智谱 Coding 套餐 / 百炼国内 / 阿里 Token 套餐 / Kimi 国内等私有端点
+- ✅ **三级连通性测试** — ① `/models` 探测端点与 Key（零成本）→ ② 最小真实对话验证模型与参数 → ③ 思考流确认；测试结果直接列出该 Key 的**可用模型清单**；配额耗尽等错误以人话提示，绝不无意义重试
+- 🧩 **自定义供应商** — 任何 OpenAI 兼容端点（中转站/私有部署）填 Base URL + Key，一键拉取模型列表即用
 
 ## 快速开始
 
-### 1. 安装依赖
-
 ```bash
-pip install flask requests
+pip install -r requirements.txt
+python app.py
+# 浏览器打开 http://127.0.0.1:7819
 ```
 
-### 2. 配置模型
+首次使用：
 
-复制示例配置文件：
+1. 点右上「⚙ 设置」，在厂商列表粘贴各家 API Key（智谱 / DeepSeek / OpenRouter / 百炼 / Kimi / MiniMax / 硅基流动 / 阶跃…），点「测试」确认绿灯并查看可用模型
+2. （可选）联网搜索区粘贴 Anysearch API Key，获得高质量中文搜索；留空自动用免费 ddgs
+3. 首页「+ 模型」添加参与对比的模型槽位，勾选 🧠 开思考、选思考等级
+4. （可选）设置 → 高级 → 选择主模型（负责汇总）
+5. 输入问题发送，观察各栏流式输出与底部主模型汇总
 
-```bash
-cp config.example.json config.json
+## 架构
+
+```
+┌────────────────────────────────────────────────┐
+│ registry.py  厂商/模型注册表                     │
+│  · models.dev 拉取 + 磁盘缓存 + ETag 增量刷新     │
+│  · 私有端点覆盖(zhipu-coding/dashscope-cn/…)     │
+├────────────────────────────────────────────────┤
+│ adapters.py  思考方言层 + 三级连通测试             │
+│  · (厂商, 开关, 等级) → 各家 JSON 参数            │
+│  · probe: /models → 最小对话 → 思考流确认         │
+├────────────────────────────────────────────────┤
+│ searchhub.py 应用侧统一搜索                       │
+│  · Anysearch(HTTP MCP) 优先 / ddgs 兜底          │
+│  · 同一份材料注入所有子模型(对比变量干净)           │
+├────────────────────────────────────────────────┤
+│ app.py  Flask + NDJSON 流式管线                  │
+│  · 子模型并发流式(含思考流) → 主模型真流式汇总      │
+│  · 重试分流: 429/5xx/超时才重试,配额类秒判不重试    │
+└────────────────────────────────────────────────┘
 ```
 
-编辑 `config.json`，填入你的 API Key：
+## 已实测的思考参数方言
 
-```json
+| 厂商 | 开思考 | 思考等级 |
+|---|---|---|
+| 智谱 GLM (coding) | `thinking: {"type": "enabled"}` | 不支持(忽略) |
+| 阿里百炼 / Token套餐 | `enable_thinking: true` | `thinking_budget` 2048/8192/16384 |
+| DeepSeek 官方 (v4 系) | 模型自带 | `reasoning_effort: low/medium/high` |
+| Kimi / MiniMax / 硅基流动 / 阶跃 | 模型自带或无 | — |
+
+## 安全说明
+
+- **`config.json`（含真实 API Key）已在 `.gitignore` 中排除，永不入库**；仓库只提供 `config.example.json` 脱敏示例
+- Key 仅保存在本机，前端展示走掩码（`sk-1****abcd`）
+- 联网搜索走服务端转发，浏览器不直接暴露 Key
+
+## 配置文件说明 (`config.json`)
+
+```jsonc
 {
-  "providers": {
-    "dashscope": {
-      "enabled": true,
-      "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
-      "api_key": "你的API密钥",
-      "model": "qwen-plus",
-      "label": "阿里云百炼"
-    }
+  "keys": {              // 厂商 pid -> API Key(本机保存,不入库)
+    "zhipu-coding": "…",
+    "deepseek": "…"
   },
-  "main": "dashscope",
-  "summary_prompt": "结合各模型的返回，提供的视角和思路，整合后给自己的答案"
+  "custom_vendors": {},  // 自定义供应商
+  "main": ["deepseek", "deepseek-chat"],  // 主模型 [pid, model]
+  "search": { "anysearch_key": "" },      // 联网搜索源
+  "summary_prompt": ""   // 自定义主模型提示词(空=内置四模式认知中枢)
 }
 ```
-
-或通过 Web 界面配置：启动服务后点击「⚙ 设置」按钮。
-
-### 3. 启动服务
-
-```bash
-python app.py
-```
-
-访问 http://127.0.0.1:7819
-
-## 配置说明
-
-### 内置预设
-
-- **智谱 GLM**：`https://open.bigmodel.cn/api/paas/v4`
-- **阿里云百炼**：`https://dashscope.aliyuncs.com/compatible-mode/v1`
-- **DeepSeek**：`https://api.deepseek.com/v1`
-- **月之暗面 Kimi**：`https://api.moonshot.cn/v1`
-- **MiniMax**：`https://api.minimax.chat/v1`
-- **OpenRouter**：`https://openrouter.ai/api/v1`
-- **硅基流动**：`https://api.siliconflow.cn/v1`
-- **Ollama 本地**：`http://localhost:11434/v1`
-
-### 自定义 Provider
-
-支持任何 OpenAI 兼容协议的模型，只需填写：
-- Base URL
-- API Key
-- 模型名
-- 显示名（可选）
-
-### 主模型汇总提示词
-
-默认提示词：
-
-```
-你是主控模型。不要逐个点评或罗列这些回答,而是:
-1. 汲取各回答中有价值的视角、论据与洞见;
-2. 剔除错误、片面或重复的内容,识别各模型的分歧点并独立判断谁更可信;
-3. 在此基础上形成你自己完整、连贯的最终答案——它应当比任何单一子模型的回答都更全面、更准确,直接回应问题本身。
-输出格式:直接给出你的最终答案(可分点/分层组织),如有必要可在末尾用一小段简述你采纳与舍弃了哪些观点及原因。用中文回答。
-```
-
-可在设置中自定义。
-
-## 项目结构
-
-```
-Moa/
-├── app.py              # Flask 后端
-├── config.json         # 本地配置（包含真实 API Key，不提交）
-├── config.example.json # 示例配置（API Key 已脱敏）
-├── static/
-│   └── index.html      # 前端界面
-├── mock_openai.py      # Mock 服务（测试用）
-└── README.md
-```
-
-## 技术栈
-
-- **后端**：Flask + requests
-- **前端**：原生 HTML/CSS/JavaScript
-- **协议**：OpenAI Chat Completions API（流式）
-
-## 注意事项
-
-- `config.json` 包含真实 API Key，已在 `.gitignore` 中排除
-- 提交前请确保使用 `config.example.json` 作为模板
-- 所有模型调用均走 HTTPS，API Key 仅在本地存储
 
 ## License
 
