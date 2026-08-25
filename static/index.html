@@ -520,7 +520,6 @@ async function ask() {
   buildColumns();
   cols.classList.toggle("many", S.slots.length >= 4);
   $("#question").value = "";
-  const summaryThere = !!savedMain;
 
   try {
     const resp = await fetch("/api/ask", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)});
