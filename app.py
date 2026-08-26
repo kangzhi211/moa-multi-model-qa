@@ -695,27 +695,39 @@ def api_ask():
         else:
             main_pid = None
 
-    # 主模型不能同时是子模型
+    # 主模型不能同时是子模型(同pid+同model才剔除,同厂商不同模型可以)
     if main_pid:
-        selected = [s for s in selected
+        filtered = [s for s in selected
                     if not (s["pid"] == main_pid and s["model"] == main_model)]
+        if filtered:
+            selected = filtered
+        else:
+            # 唯一子模型=主模型 → 自动降级为无汇总模式(保留子模型,不做汇总)
+            main_pid, main_model = None, None
     if not selected:
-        return jsonify(error="至少需要一个非主模型的子模型"), 400
+        return jsonify(error="至少选择一个子模型"), 400
 
     use_search = bool(body.get("search"))
     custom_prompt = (body.get("summary_prompt") or cfg.get("summary_prompt")
                      or "").strip() or None
 
     def generate():
-        # 1. 搜索(联网开时)
+        # 1. 搜索(联网开时); 无论是否联网都注入当前时间(防 LLM 时间感错乱)
         refs = ""
         if use_search:
             yield nd(dict(event="search_start"))
             refs = searchhub.search(question, cfg.get("search", {}))
-            yield nd(dict(event="search_done", chars=len(refs)))
+            yield nd(dict(event="search_done", chars=len(refs), refs=refs))
 
         # 2. 并发子模型
-        full_q = (question + "\n\n" + refs) if refs else question
+        from datetime import datetime, timezone, timedelta
+        now = datetime.now(timezone(timedelta(hours=8)))
+        time_anchor = (f"[当前时间: {now.strftime('%Y-%m-%d %H:%M')} "
+                       f"(星期{'一二三四五六日'[now.weekday()]}, 北京时间)]")
+        if refs:
+            full_q = refs + "\n\n" + question  # refs 里已含时间锚点,问题放最后
+        else:
+            full_q = time_anchor + "\n\n" + question
         qout: queue.Queue = queue.Queue()
         tags = []
         for s in selected:

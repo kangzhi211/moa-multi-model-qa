@@ -73,6 +73,9 @@ select option, select optgroup { background: #1d2130; color: #e6e9f0; }
 .col.error .col-body { color: var(--err); font-size: 12px; }
 .search-banner { flex-basis: 100%; font-size: 11px; color: var(--muted); background: var(--panel2); border-radius: 8px; padding: 6px 12px; }
 .search-banner details summary { cursor: pointer; }
+.search-detail { flex-basis: 100%; background: var(--panel2); border: 1px solid var(--border); border-radius: 8px; font-size: 12px; }
+.search-detail summary { padding: 6px 12px; cursor: pointer; color: #a5b4fc; user-select: none; }
+.search-detail .search-refs { max-height: 320px; overflow-y: auto; padding: 8px 14px; margin: 0; white-space: pre-wrap; word-break: break-all; font-size: 11.5px; line-height: 1.55; color: var(--muted); border-top: 1px solid var(--border); }
 
 footer { display: flex; gap: 10px; padding: 12px 18px; background: var(--panel); border-top: 1px solid var(--border); }
 footer textarea { flex: 1; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; font: inherit; resize: none; outline: none; }
@@ -121,7 +124,7 @@ footer .primary { align-self: flex-end; height: 42px; padding: 0 22px; }
   <button id="btn-add-slot" style="padding:4px 12px;font-size:12px;">+ 模型</button>
   <div class="spacer"></div>
   <label id="search-toggle-wrap" title="所有子模型将基于同一份搜索资料作答">
-    <input type="checkbox" id="search-toggle"> 🌐 联网
+    <input type="checkbox" id="search-toggle"> 🌐 联网<span id="search-state" style="font-size:11px;color:var(--accent);"></span>
   </label>
 </div>
 
@@ -514,6 +517,15 @@ async function ask() {
   const savedMain = S.main;
   if (savedMain) body.main = savedMain;
 
+  // 时效性问题时若未开联网,二次确认(防幻觉作答)
+  if (!body.search && /昨夜|昨晚|今天|今日|现在|最新|最近|刚刚|实时|当前/.test(q)) {
+    if (confirm("检测到时效性问题,但「🌐 联网」未开启——模型可能凭记忆胡乱作答。\n\n确定 = 开启联网搜索后提问\n取消 = 仍然离线作答")) {
+      $("#search-toggle").checked = true;
+      body.search = true;
+      saveLS();
+    }
+  }
+
   $("#status-badge").textContent = "运行中…";
   const cols = $("#columns");
   cols.innerHTML = ""; S.cols.clear();
@@ -585,12 +597,24 @@ function handleLine(line) {
 
   if (kind === "search_start") {
     $("#status-badge").textContent = "联网搜索中…";
+    const ss = $("#search-state"); if (ss) ss.textContent = "搜索中…";
   } else if (kind === "search_done") {
+    const ss = $("#search-state");
     if (ev.chars > 0) {
+      if (ss) ss.textContent = `已搜到${ev.chars}字`;
+      // 搜索材料可见面板(可折叠)
+      const det = document.createElement("details");
+      det.className = "search-detail";
+      det.innerHTML = `<summary>🌐 搜索材料(${ev.chars}字 · 点击展开/收起)</summary>
+        <pre class="search-refs"></pre>`;
+      det.querySelector(".search-refs").textContent = ev.refs || "";
+      $("#columns").prepend(det);
       const b = document.createElement("div");
       b.className = "search-banner";
       b.textContent = `🌐 已注入搜索资料 ${ev.chars} 字(所有模型基于同一材料作答)`;
       $("#columns").prepend(b);
+    } else {
+      if (ss) ss.textContent = "无结果";
     }
   } else if (kind === "delta") {
     if (!c) return;
